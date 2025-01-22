@@ -35,3 +35,5 @@ workspace.xml
 /httpRequests/
 /dataSources/
 /dataSources.local.xml
+
+/data/
