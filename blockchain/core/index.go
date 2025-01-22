@@ -1,8 +1,8 @@
 package core
 
 import (
+	"github.com/MinhNguyenKha02/q2p/blockchain/types"
 	"github.com/dgraph-io/badger/v3"
-	"github.com/yourusername/yourproject/blockchain/types"
 )
 
 type Blockchain struct {
