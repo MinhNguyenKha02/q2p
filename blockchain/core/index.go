@@ -30,6 +30,21 @@ func (bc *Blockchain) AddTransaction(tx types.Transaction) {
 }
 
 func (bc *Blockchain) CreateBlock() (*types.Block, error) {
-	// TODO: Implement block creation
+	// Create block with transactions from pool
+	// Calculate block hash
+	// Validate block
+	// Persist to BadgerDB
+	return nil, nil
+}
+
+func (bc *Blockchain) ValidateBlock(block *types.Block) error {
+	// Verify previous hash
+	// Verify transactions
+	// Verify block hash
+	return nil
+}
+
+func (bc *Blockchain) GetLastBlock() (*types.Block, error) {
+	// Retrieve last block from DB
 	return nil, nil
 }
