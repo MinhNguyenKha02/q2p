@@ -1,7 +1,8 @@
 package core
 
 import (
-	"github.com/MinhNguyenKha02/q2p/blockchain/types"
+	"q2p/blockchain/types"
+
 	"github.com/dgraph-io/badger/v3"
 )
 

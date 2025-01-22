@@ -1,8 +1,9 @@
 package blockchain
 
 import (
-	"github.com/MinhNguyenKha02/q2p/blockchain/core"
-	"github.com/MinhNguyenKha02/q2p/blockchain/p2p"
+	"q2p/blockchain/core"
+	"q2p/blockchain/p2p"
+
 	"github.com/libp2p/go-libp2p/core/host"
 )
 
