@@ -1,9 +1,9 @@
 package blockchain
 
 import (
+	"github.com/MinhNguyenKha02/q2p/blockchain/core"
+	"github.com/MinhNguyenKha02/q2p/blockchain/p2p"
 	"github.com/libp2p/go-libp2p/core/host"
-	"github.com/yourusername/yourproject/blockchain/core"
-	"github.com/yourusername/yourproject/blockchain/p2p"
 )
 
 // Node represents a blockchain node in the P2P network
