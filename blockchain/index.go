@@ -1,8 +1,13 @@
 package blockchain
 
 import (
+<<<<<<< HEAD
 	"q2p/blockchain/core"
 	"q2p/blockchain/p2p"
+=======
+	"github.com/MinhNguyenKha02/q2p/blockchain/core"
+	"github.com/MinhNguyenKha02/q2p/blockchain/p2p"
+>>>>>>> origin/main
 	"github.com/libp2p/go-libp2p/core/host"
 )
 

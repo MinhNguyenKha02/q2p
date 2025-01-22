@@ -2,6 +2,7 @@ package p2p
 
 import (
 	"q2p/blockchain/types"
+
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/protocol"
