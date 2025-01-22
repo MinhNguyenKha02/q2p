@@ -52,6 +52,7 @@ func (n *Node) handleBlockchainStream(stream network.Stream) {
 
 // syncWithPeers attempts to sync blockchain state with connected peers
 func (n *Node) syncWithPeers() {
-	// TODO: Implement blockchain synchronization logic
+	// Request latest blocks
+	// Validate and add missing blocks
 	log.Println("Starting blockchain sync with peers...")
 }

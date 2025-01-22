@@ -29,7 +29,8 @@ func (s *Service) initProtocols() {
 }
 
 func (s *Service) BroadcastBlock(block *types.Block) {
-	// TODO: Implement block broadcasting
+	// Serialize block
+	// Send to all peers
 }
 
 func (s *Service) BroadcastTransaction(tx *types.Transaction) {
@@ -37,7 +38,9 @@ func (s *Service) BroadcastTransaction(tx *types.Transaction) {
 }
 
 func (s *Service) handleBlockStream(stream network.Stream) {
-	// TODO: Implement block receiving and validation
+	// Deserialize block
+	// Validate block
+	// Add to blockchain
 }
 
 func (s *Service) handleTxStream(stream network.Stream) {
