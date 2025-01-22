@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 
+	"q2p/blockchain"
+
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -31,6 +33,13 @@ func main() {
 	// Print the node's addresses
 	fmt.Println("Host ID:", h.ID())
 	fmt.Println("Host Addresses:", h.Addrs())
+
+	// Initialize blockchain node
+	node, err := blockchain.NewNode(h)
+	if err != nil {
+		log.Fatal(err)
+	}
+	node.Start()
 
 	// Keep the program running
 	select {}
