@@ -1,7 +1,12 @@
 package core
 
 import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/json"
+	"fmt"
 	"q2p/blockchain/types"
+	"time"
 
 	"github.com/dgraph-io/badger/v3"
 )
@@ -12,6 +17,7 @@ type Blockchain struct {
 	txPool   []types.Transaction
 }
 
+// NewBlockchain initializes or loads an existing blockchain
 func NewBlockchain(dbPath string) (*Blockchain, error) {
 	opts := badger.DefaultOptions(dbPath)
 	db, err := badger.Open(opts)
@@ -19,32 +25,164 @@ func NewBlockchain(dbPath string) (*Blockchain, error) {
 		return nil, err
 	}
 
-	return &Blockchain{
+	bc := &Blockchain{
 		db:     db,
 		txPool: make([]types.Transaction, 0),
-	}, nil
+	}
+
+	// Load the last hash from DB
+	err = db.View(func(txn *badger.Txn) error {
+		item, err := txn.Get([]byte("lh"))
+		if err == badger.ErrKeyNotFound {
+			// Initialize genesis block if blockchain is new
+			genesis := bc.createGenesisBlock()
+			return bc.addBlock(genesis)
+		}
+		if err != nil {
+			return err
+		}
+		return item.Value(func(val []byte) error {
+			bc.lastHash = append([]byte{}, val...)
+			return nil
+		})
+	})
+
+	return bc, err
 }
 
+// createGenesisBlock creates the first block in the chain
+func (bc *Blockchain) createGenesisBlock() *types.Block {
+	return &types.Block{
+		Hash:          []byte{},
+		Transactions:  []types.Transaction{},
+		PrevBlockHash: []byte{},
+		Timestamp:     time.Now().Unix(),
+		Nonce:         0,
+	}
+}
+
+// AddTransaction adds a new transaction to the pool
 func (bc *Blockchain) AddTransaction(tx types.Transaction) {
+	// Add timestamp if not set
+	if tx.Timestamp == 0 {
+		tx.Timestamp = time.Now().Unix()
+	}
 	bc.txPool = append(bc.txPool, tx)
 }
 
+// CreateBlock creates a new block with pending transactions
 func (bc *Blockchain) CreateBlock() (*types.Block, error) {
 	// Create block with transactions from pool
+	if len(bc.txPool) == 0 {
+		return nil, fmt.Errorf("no transactions to create block")
+	}
+
+	block := &types.Block{
+		Transactions:  bc.txPool,
+		PrevBlockHash: bc.lastHash,
+		Timestamp:     time.Now().Unix(),
+		Nonce:         0,
+	}
+
 	// Calculate block hash
+	block.Hash = bc.calculateHash(block)
+
 	// Validate block
-	// Persist to BadgerDB
-	return nil, nil
+
+	// Persist block
+	if err := bc.addBlock(block); err != nil {
+		return nil, err
+	}
+
+	// Clear transaction pool
+	bc.txPool = make([]types.Transaction, 0)
+
+	return block, nil
 }
 
+// ValidateBlock validates a block's integrity
 func (bc *Blockchain) ValidateBlock(block *types.Block) error {
-	// Verify previous hash
-	// Verify transactions
+	// Verify previous hash matches our last block
+	if !bytes.Equal(block.PrevBlockHash, bc.lastHash) {
+		return fmt.Errorf("invalid previous hash")
+	}
+
 	// Verify block hash
+	expectedHash := bc.calculateHash(block)
+	if !bytes.Equal(block.Hash, expectedHash) {
+		return fmt.Errorf("invalid block hash")
+	}
+
+	// Verify transactions (basic validation)
+	for _, tx := range block.Transactions {
+		if tx.ID == "" || tx.Timestamp == 0 {
+			return fmt.Errorf("invalid transaction in block")
+		}
+	}
+
 	return nil
 }
 
+// GetLastBlock retrieves the last block in the chain
 func (bc *Blockchain) GetLastBlock() (*types.Block, error) {
 	// Retrieve last block from DB
-	return nil, nil
+	if bc.lastHash == nil {
+		return nil, fmt.Errorf("blockchain is empty")
+	}
+
+	var block types.Block
+	err := bc.db.View(func(txn *badger.Txn) error {
+		item, err := txn.Get(bc.lastHash)
+		if err != nil {
+			return err
+		}
+
+		return item.Value(func(val []byte) error {
+			return json.Unmarshal(val, &block)
+		})
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return &block, nil
+}
+
+// addBlock persists a block to the database
+func (bc *Blockchain) addBlock(block *types.Block) error {
+	blockData, err := json.Marshal(block)
+	if err != nil {
+		return err
+	}
+
+	return bc.db.Update(func(txn *badger.Txn) error {
+		// Store block
+		if err := txn.Set(block.Hash, blockData); err != nil {
+			return err
+		}
+		// Update last hash
+		if err := txn.Set([]byte("lh"), block.Hash); err != nil {
+			return err
+		}
+		bc.lastHash = block.Hash
+		return nil
+	})
+}
+
+// calculateHash calculates the hash of a block
+func (bc *Blockchain) calculateHash(block *types.Block) []byte {
+	blockData, _ := json.Marshal(struct {
+		PrevHash     []byte
+		Transactions []types.Transaction
+		Timestamp    int64
+		Nonce        int
+	}{
+		PrevHash:     block.PrevBlockHash,
+		Transactions: block.Transactions,
+		Timestamp:    block.Timestamp,
+		Nonce:        block.Nonce,
+	})
+
+	hash := sha256.Sum256(blockData)
+	return hash[:]
 }
