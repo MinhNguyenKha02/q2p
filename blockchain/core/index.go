@@ -35,8 +35,8 @@ func NewBlockchain(dbPath string) (*Blockchain, error) {
 		item, err := txn.Get([]byte("lh"))
 		if err == badger.ErrKeyNotFound {
 			// Initialize genesis block if blockchain is new
-			genesis := bc.createGenesisBlock()
-			return bc.addBlock(genesis)
+			genesis := bc.CreateGenesisBlock()
+			return bc.AddBlock(genesis)
 		}
 		if err != nil {
 			return err
@@ -50,8 +50,8 @@ func NewBlockchain(dbPath string) (*Blockchain, error) {
 	return bc, err
 }
 
-// createGenesisBlock creates the first block in the chain
-func (bc *Blockchain) createGenesisBlock() *types.Block {
+// CreateGenesisBlock creates the first block in the chain
+func (bc *Blockchain) CreateGenesisBlock() *types.Block {
 	return &types.Block{
 		Hash:          []byte{},
 		Transactions:  []types.Transaction{},
@@ -85,12 +85,12 @@ func (bc *Blockchain) CreateBlock() (*types.Block, error) {
 	}
 
 	// Calculate block hash
-	block.Hash = bc.calculateHash(block)
+	block.Hash = bc.CalculateHash(block)
 
 	// Validate block
 
 	// Persist block
-	if err := bc.addBlock(block); err != nil {
+	if err := bc.AddBlock(block); err != nil {
 		return nil, err
 	}
 
@@ -108,7 +108,7 @@ func (bc *Blockchain) ValidateBlock(block *types.Block) error {
 	}
 
 	// Verify block hash
-	expectedHash := bc.calculateHash(block)
+	expectedHash := bc.CalculateHash(block)
 	if !bytes.Equal(block.Hash, expectedHash) {
 		return fmt.Errorf("invalid block hash")
 	}
@@ -148,8 +148,8 @@ func (bc *Blockchain) GetLastBlock() (*types.Block, error) {
 	return &block, nil
 }
 
-// addBlock persists a block to the database
-func (bc *Blockchain) addBlock(block *types.Block) error {
+// AddBlock persists a block to the database
+func (bc *Blockchain) AddBlock(block *types.Block) error {
 	blockData, err := json.Marshal(block)
 	if err != nil {
 		return err
@@ -169,8 +169,8 @@ func (bc *Blockchain) addBlock(block *types.Block) error {
 	})
 }
 
-// calculateHash calculates the hash of a block
-func (bc *Blockchain) calculateHash(block *types.Block) []byte {
+// CalculateHash calculates the hash of a block
+func (bc *Blockchain) CalculateHash(block *types.Block) []byte {
 	blockData, _ := json.Marshal(struct {
 		PrevHash     []byte
 		Transactions []types.Transaction
@@ -185,4 +185,21 @@ func (bc *Blockchain) calculateHash(block *types.Block) []byte {
 
 	hash := sha256.Sum256(blockData)
 	return hash[:]
+}
+// ValidateTransaction validates a single transaction
+func (bc *Blockchain) ValidateTransaction(tx *types.Transaction) error {
+    if tx.ID == "" || tx.Timestamp == 0 {
+        return fmt.Errorf("invalid transaction")
+    }
+    // Add more validation logic as needed
+    return nil
+}
+
+// AddToTxPool adds a transaction to the memory pool
+func (bc *Blockchain) AddToTxPool(tx *types.Transaction) error {
+    if err := bc.ValidateTransaction(tx); err != nil {
+        return err
+    }
+    bc.txPool = append(bc.txPool, *tx)
+    return nil
 }
