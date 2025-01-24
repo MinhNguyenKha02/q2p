@@ -5,12 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"bytes"
-	"crypto/sha256"
-	"encoding/json"
-	"fmt"
 	"q2p/blockchain/types"
-	"time"
 	"time"
 
 	"github.com/dgraph-io/badger/v3"
@@ -23,7 +18,6 @@ type Blockchain struct {
 }
 
 // NewBlockchain initializes or loads an existing blockchain
-// NewBlockchain initializes or loads an existing blockchain
 func NewBlockchain(dbPath string) (*Blockchain, error) {
 	opts := badger.DefaultOptions(dbPath)
 	db, err := badger.Open(opts)
@@ -32,43 +26,8 @@ func NewBlockchain(dbPath string) (*Blockchain, error) {
 	}
 
 	bc := &Blockchain{
-	bc := &Blockchain{
 		db:     db,
 		txPool: make([]types.Transaction, 0),
-	}
-
-	// Load the last hash from DB
-	err = db.View(func(txn *badger.Txn) error {
-		item, err := txn.Get([]byte("lh"))
-		if err == badger.ErrKeyNotFound {
-			// Initialize genesis block if blockchain is new
-			genesis := bc.createGenesisBlock()
-			return bc.addBlock(genesis)
-		}
-		if err != nil {
-			return err
-		}
-		return item.Value(func(val []byte) error {
-			bc.lastHash = append([]byte{}, val...)
-			return nil
-		})
-	})
-
-	return bc, err
-}
-
-// createGenesisBlock creates the first block in the chain
-func (bc *Blockchain) createGenesisBlock() *types.Block {
-	return &types.Block{
-		Hash:          []byte{},
-		Transactions:  []types.Transaction{},
-		PrevBlockHash: []byte{},
-		Timestamp:     time.Now().Unix(),
-		Nonce:         0,
-	}
-}
-
-// AddTransaction adds a new transaction to the pool
 	}
 
 	// Load the last hash from DB
@@ -108,14 +67,9 @@ func (bc *Blockchain) AddTransaction(tx types.Transaction) {
 	if tx.Timestamp == 0 {
 		tx.Timestamp = time.Now().Unix()
 	}
-	// Add timestamp if not set
-	if tx.Timestamp == 0 {
-		tx.Timestamp = time.Now().Unix()
-	}
 	bc.txPool = append(bc.txPool, tx)
 }
 
-// CreateBlock creates a new block with pending transactions
 // CreateBlock creates a new block with pending transactions
 func (bc *Blockchain) CreateBlock() (*types.Block, error) {
 	// Create block with transactions from pool
@@ -231,22 +185,4 @@ func (bc *Blockchain) calculateHash(block *types.Block) []byte {
 
 	hash := sha256.Sum256(blockData)
 	return hash[:]
-}
-
-// ValidateTransaction validates a single transaction
-func (bc *Blockchain) ValidateTransaction(tx *types.Transaction) error {
-	if tx.ID == "" || tx.Timestamp == 0 {
-		return fmt.Errorf("invalid transaction")
-	}
-	// Add more validation logic as needed
-	return nil
-}
-
-// AddToTxPool adds a transaction to the memory pool
-func (bc *Blockchain) AddToTxPool(tx *types.Transaction) error {
-	if err := bc.ValidateTransaction(tx); err != nil {
-		return err
-	}
-	bc.txPool = append(bc.txPool, *tx)
-	return nil
 }
