@@ -186,21 +186,3 @@ func (bc *Blockchain) calculateHash(block *types.Block) []byte {
 	hash := sha256.Sum256(blockData)
 	return hash[:]
 }
-
-// ValidateTransaction validates a single transaction
-func (bc *Blockchain) ValidateTransaction(tx *types.Transaction) error {
-	if tx.ID == "" || tx.Timestamp == 0 {
-		return fmt.Errorf("invalid transaction")
-	}
-	// Add more validation logic as needed
-	return nil
-}
-
-// AddToTxPool adds a transaction to the memory pool
-func (bc *Blockchain) AddToTxPool(tx *types.Transaction) error {
-	if err := bc.ValidateTransaction(tx); err != nil {
-		return err
-	}
-	bc.txPool = append(bc.txPool, *tx)
-	return nil
-}
