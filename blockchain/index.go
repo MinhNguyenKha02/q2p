@@ -27,7 +27,7 @@ func NewNode(h host.Host) (*Node, error) {
 
 	return &Node{
 		chain: chain,
-		p2p:   p2p.NewService(h),
+		p2p:   p2p.NewService(h, chain),
 		host:  h,
 	}, nil
 }
