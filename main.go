@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -15,9 +14,33 @@ import (
 	"q2p/blockchain/types"
 
 	"github.com/libp2p/go-libp2p"
-	"github.com/libp2p/go-libp2p/core/host"
-	"github.com/libp2p/go-libp2p/core/peer"
 )
+
+type Metrics struct {
+	TxCount        int64
+	BlockCount     int64
+	ConnectedPeers int
+	LastBlockTime  time.Time
+}
+
+// func monitorMetrics(bc *core.Blockchain, p2p *p2p.Service) {
+// 	metrics := &Metrics{}
+// 	// Update and log metrics
+// }
+
+type Config struct {
+	P2P struct {
+		Port           int
+		BootstrapPeers []string
+		MaxPeers       int
+	}
+	Blockchain struct {
+		DBPath        string
+		MaxTxPoolSize int
+		BlockInterval time.Duration
+		MinTxPerBlock int
+	}
+}
 
 func main() {
 	// Set up logging
@@ -42,6 +65,10 @@ func main() {
 	}
 	defer h.Close()
 	log.Printf("Host created successfully. ID: %s", h.ID().String())
+
+	// Print node address for other peers to connect
+	log.Printf("Node address for other peers: /ip4/127.0.0.1/tcp/%d/p2p/%s\n",
+		*listenPort, h.ID().String())
 
 	// Ensure database directory exists
 	if err := os.MkdirAll(*dbPath, 0755); err != nil {
@@ -68,10 +95,15 @@ func main() {
 	// Connect to peer if specified
 	if *connectPeer != "" {
 		log.Printf("Attempting to connect to peer: %s", *connectPeer)
-		if err := p2pService.ConnectToPeer(*connectPeer); err != nil {
-			log.Printf("WARNING: Failed to connect to peer: %v", err)
-		} else {
+		// Add retry logic for peer connection
+		for i := 0; i < 3; i++ {
+			if err := p2pService.ConnectToPeer(*connectPeer); err != nil {
+				log.Printf("Attempt %d: Failed to connect to peer: %v", i+1, err)
+				time.Sleep(time.Second * 2)
+				continue
+			}
 			log.Println("Successfully connected to peer")
+			break
 		}
 	}
 
@@ -100,25 +132,26 @@ func main() {
 	go func() {
 		log.Println("Starting block creation routine...")
 		for {
-			time.Sleep(30 * time.Second)
-
-			log.Println("Attempting to create new block...")
-			block, err := bc.CreateBlock()
-			if err != nil {
-				if err.Error() != "no transactions to create block" {
-					log.Printf("ERROR: Failed to create block: %v", err)
-				} else {
-					log.Println("No transactions available for new block")
+			time.Sleep(10 * time.Second)
+			if len(bc.GetTxPool()) > 10 {
+				log.Println("Attempting to create new block...")
+				block, err := bc.CreateBlock()
+				if err != nil {
+					if err.Error() != "no transactions to create block" {
+						log.Printf("ERROR: Failed to create block: %v", err)
+					} else {
+						log.Println("No transactions available for new block")
+					}
+					continue
 				}
-				continue
-			}
 
-			log.Printf("Broadcasting new block with %d transactions", len(block.Transactions))
-			if err := p2pService.BroadcastBlock(block); err != nil {
-				log.Printf("ERROR: Failed to broadcast block: %v", err)
-				continue
+				log.Printf("Broadcasting new block with %d transactions", len(block.Transactions))
+				if err := p2pService.BroadcastBlock(block); err != nil {
+					log.Printf("ERROR: Failed to broadcast block: %v", err)
+					continue
+				}
+				log.Println("Block broadcast successful")
 			}
-			log.Println("Block broadcast successful")
 		}
 	}()
 
@@ -132,6 +165,29 @@ func main() {
 		}
 	}()
 
+	// Add transaction pool cleanup routine
+	go func() {
+		log.Println("Starting transaction pool cleanup routine...")
+		for {
+			time.Sleep(time.Minute) // Clean pool every minute
+			poolSize := len(bc.GetTxPool())
+			bc.CleanTxPool()
+			newSize := len(bc.GetTxPool())
+			if poolSize != newSize {
+				log.Printf("Cleaned transaction pool: %d -> %d transactions",
+					poolSize, newSize)
+			}
+		}
+	}()
+
+	// Add this to periodic monitoring in main.go
+	go func() {
+		for {
+			time.Sleep(5 * time.Second)
+			log.Printf("Transaction pool status: %s", bc.GetTxPoolStatus())
+		}
+	}()
+
 	// Wait for interrupt signal
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
@@ -140,25 +196,4 @@ func main() {
 
 	log.Println("Shutdown signal received")
 	log.Println("Shutting down node...")
-}
-
-func createHost(port int) (host.Host, error) {
-	// Create libp2p host with TCP transport
-	return libp2p.New(
-		libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", port)),
-	)
-}
-
-// discoveryNotifee gets notified when we find a new peer
-type discoveryNotifee struct {
-	h host.Host
-}
-
-// HandlePeerFound connects to peers discovered via mDNS
-func (n *discoveryNotifee) HandlePeerFound(pi peer.AddrInfo) {
-	fmt.Printf("discovered new peer %s\n", pi.ID.String())
-	err := n.h.Connect(context.Background(), pi)
-	if err != nil {
-		fmt.Printf("error connecting to peer %s: %s\n", pi.ID.String(), err)
-	}
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"q2p/blockchain/core"
 	"q2p/blockchain/types"
 
@@ -39,28 +40,35 @@ func (s *Service) initProtocols() {
 }
 
 func (s *Service) BroadcastBlock(block *types.Block) error {
-	// Serialize block
-	blockData, err := json.Marshal(block)
-	if err != nil {
-		return fmt.Errorf("failed to serialize block: %v", err)
-	}
-	// Send to all peers
-	for _, peer := range s.host.Network().Peers() {
-		stream, err := s.host.NewStream(context.Background(), peer, BlockProtocolID)
-		if err != nil {
-			continue
-		}
-		defer stream.Close()
+	log.Printf("Broadcasting block with %d transactions. Pool before: %s", 
+		len(block.Transactions),
+		s.bc.GetTxPoolStatus())
 
-		_, err = stream.Write(blockData)
-		if err != nil {
+	successCount := 0
+	for _, peer := range s.host.Network().Peers() {
+		if err := s.sendBlockToPeer(peer, block); err != nil {
+			log.Printf("Failed to send block to peer %s: %v", peer, err)
 			continue
 		}
+		successCount++
 	}
+	if successCount == 0 {
+		return fmt.Errorf("failed to broadcast block to any peers")
+	}
+
+	log.Printf("Block broadcast complete. Pool after: %s",
+		s.bc.GetTxPoolStatus())
+	
 	return nil
 }
 
 func (s *Service) BroadcastTransaction(tx *types.Transaction) error {
+	// First add to local pool before broadcasting
+	if err := s.bc.AddToTxPool(tx); err != nil {
+		return fmt.Errorf("failed to add to local pool: %v", err)
+	}
+
+	// Then broadcast to peers
 	txData, err := json.Marshal(tx)
 	if err != nil {
 		return fmt.Errorf("failed to serialize transaction: %v", err)
@@ -118,7 +126,7 @@ func (s *Service) handleTxStream(stream network.Stream) {
 	if err := json.Unmarshal(data, &tx); err != nil {
 		return
 	}
-	 // Validate transaction
+	// Validate transaction
 	if err := s.bc.ValidateTransaction(&tx); err != nil {
 		return
 	}
@@ -146,4 +154,27 @@ func (s *Service) ConnectToPeer(peerAddr string) error {
 
 func (s *Service) GetPeers() []peer.ID {
 	return s.host.Network().Peers()
+}
+
+func (s *Service) SyncWithPeer(peer peer.ID) error {
+	// Get peer's latest block height
+	// Compare with our height
+	// Request missing blocks
+	return nil
+}
+
+func (s *Service) sendBlockToPeer(peer peer.ID, block *types.Block) error {
+	stream, err := s.host.NewStream(context.Background(), peer, BlockProtocolID)
+	if err != nil {
+		return err
+	}
+	defer stream.Close()
+
+	blockData, err := json.Marshal(block)
+	if err != nil {
+		return err
+	}
+
+	_, err = stream.Write(blockData)
+	return err
 }
