@@ -52,13 +52,18 @@ func NewBlockchain(dbPath string) (*Blockchain, error) {
 
 // CreateGenesisBlock creates the first block in the chain
 func (bc *Blockchain) CreateGenesisBlock() *types.Block {
-	return &types.Block{
-		Hash:          []byte{},
+	genesisBlock := &types.Block{
+		Hash:          []byte("genesis-block-hash"), // Add initial hash
 		Transactions:  []types.Transaction{},
-		PrevBlockHash: []byte{},
+		PrevBlockHash: []byte("0"), // Add initial prev hash
 		Timestamp:     time.Now().Unix(),
 		Nonce:         0,
 	}
+
+	// Calculate proper hash for genesis block
+	genesisBlock.Hash = bc.CalculateHash(genesisBlock)
+
+	return genesisBlock
 }
 
 // AddTransaction adds a new transaction to the pool
