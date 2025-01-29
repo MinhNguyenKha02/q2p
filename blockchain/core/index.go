@@ -15,7 +15,7 @@ import (
 type Blockchain struct {
 	db       *badger.DB
 	lastHash []byte
-	txPool   []types.Transaction
+	txPool   []*types.Transaction
 }
 
 const MaxTxPoolSize = 1000 // Reasonable limit
@@ -30,7 +30,7 @@ func NewBlockchain(dbPath string) (*Blockchain, error) {
 
 	bc := &Blockchain{
 		db:     db,
-		txPool: make([]types.Transaction, 0),
+		txPool: make([]*types.Transaction, 0, MaxTxPoolSize),
 	}
 
 	// Load the last hash from DB
@@ -57,7 +57,7 @@ func NewBlockchain(dbPath string) (*Blockchain, error) {
 func (bc *Blockchain) CreateGenesisBlock() *types.Block {
 	genesisBlock := &types.Block{
 		Hash:          []byte("genesis-block-hash"), // Add initial hash
-		Transactions:  []types.Transaction{},
+		Transactions:  []*types.Transaction{},
 		PrevBlockHash: []byte("0"), // Add initial prev hash
 		Timestamp:     time.Now().Unix(),
 		Nonce:         0,
@@ -75,7 +75,7 @@ func (bc *Blockchain) AddTransaction(tx types.Transaction) {
 	if tx.Timestamp == 0 {
 		tx.Timestamp = time.Now().Unix()
 	}
-	bc.txPool = append(bc.txPool, tx)
+	bc.txPool = append(bc.txPool, &tx)
 }
 
 // CreateBlock creates a new block with pending transactions
@@ -101,7 +101,7 @@ func (bc *Blockchain) CreateBlock() (*types.Block, error) {
 
 	// Log pool cleanup
 	oldSize := len(bc.txPool)
-	bc.txPool = make([]types.Transaction, 0)
+	bc.txPool = make([]*types.Transaction, 0, MaxTxPoolSize)
 	log.Printf("Cleaned transaction pool after block creation: %d -> 0", oldSize)
 
 	return block, nil
@@ -180,7 +180,7 @@ func (bc *Blockchain) AddBlock(block *types.Block) error {
 func (bc *Blockchain) CalculateHash(block *types.Block) []byte {
 	blockData, _ := json.Marshal(struct {
 		PrevHash     []byte
-		Transactions []types.Transaction
+		Transactions []*types.Transaction
 		Timestamp    int64
 		Nonce        int
 	}{
@@ -217,7 +217,7 @@ func (bc *Blockchain) AddToTxPool(tx *types.Transaction) error {
 	if err := bc.ValidateTransaction(tx); err != nil {
 		return err
 	}
-	bc.txPool = append(bc.txPool, *tx)
+	bc.txPool = append(bc.txPool, tx)
 	return nil
 }
 
@@ -227,7 +227,7 @@ func (bc *Blockchain) DB() *badger.DB {
 }
 
 // GetTxPool returns the current transaction pool
-func (bc *Blockchain) GetTxPool() []types.Transaction {
+func (bc *Blockchain) GetTxPool() []*types.Transaction {
 	return bc.txPool
 }
 
@@ -265,7 +265,7 @@ func (bc *Blockchain) CleanTxPool() {
 	}
 
 	// Rebuild pool with remaining transactions
-	newPool := make([]types.Transaction, 0)
+	newPool := make([]*types.Transaction, 0)
 	for _, tx := range bc.txPool {
 		if txMap[tx.ID] {
 			newPool = append(newPool, tx)
@@ -276,7 +276,7 @@ func (bc *Blockchain) CleanTxPool() {
 
 // GetTxPoolStatus returns current pool statistics
 func (bc *Blockchain) GetTxPoolStatus() string {
-	return fmt.Sprintf("Pool size: %d, Latest block hash: %x", 
-		len(bc.txPool), 
+	return fmt.Sprintf("Pool size: %d, Latest block hash: %x",
+		len(bc.txPool),
 		bc.lastHash)
 }

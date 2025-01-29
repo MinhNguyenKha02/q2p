@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"q2p/blockchain/types"
 
 	"github.com/libp2p/go-libp2p"
+	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 type Metrics struct {
@@ -95,17 +97,30 @@ func main() {
 	// Connect to peer if specified
 	if *connectPeer != "" {
 		log.Printf("Attempting to connect to peer: %s", *connectPeer)
-		// Add retry logic for peer connection
-		for i := 0; i < 3; i++ {
-			if err := p2pService.ConnectToPeer(*connectPeer); err != nil {
-				log.Printf("Attempt %d: Failed to connect to peer: %v", i+1, err)
-				time.Sleep(time.Second * 2)
-				continue
-			}
+		if err := p2pService.ConnectToPeer(*connectPeer); err != nil {
+			log.Printf("WARNING: Failed to connect to peer: %v", err)
+		} else {
 			log.Println("Successfully connected to peer")
-			break
+
+			// Start sync with peer
+			peerID, _ := peer.Decode(strings.Split(*connectPeer, "/p2p/")[1])
+			if err := p2pService.SyncWithPeer(peerID); err != nil {
+				log.Printf("WARNING: Failed to sync with peer: %v", err)
+			}
 		}
 	}
+
+	// Add periodic sync with all peers
+	go func() {
+		for {
+			time.Sleep(time.Minute * 5) // Sync every 5 minutes
+			for _, peer := range p2pService.GetPeers() {
+				if err := p2pService.SyncWithPeer(peer); err != nil {
+					log.Printf("Failed to sync with peer %s: %v", peer, err)
+				}
+			}
+		}
+	}()
 
 	// Transaction creation goroutine
 	go func() {

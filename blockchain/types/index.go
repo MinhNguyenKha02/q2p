@@ -1,10 +1,11 @@
 package types
+
 import "github.com/dgraph-io/badger/v3"
 
 // Block represents a block in the blockchain
 type Block struct {
 	Hash          []byte
-	Transactions  []Transaction
+	Transactions  []*Transaction
 	PrevBlockHash []byte
 	Timestamp     int64
 	Nonce         int

@@ -9,6 +9,8 @@ import (
 	"q2p/blockchain/core"
 	"q2p/blockchain/types"
 
+	"bytes"
+
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -18,7 +20,15 @@ import (
 const (
 	BlockProtocolID = protocol.ID("/blockchain/blocks/1.0.0")
 	TxProtocolID    = protocol.ID("/blockchain/tx/1.0.0")
+	SyncProtocolID  = protocol.ID("/blockchain/sync/1.0.0")
 )
+
+type SyncMessage struct {
+	Type     string // "HEIGHT_REQ", "HEIGHT_RESP", "BLOCK_REQ", "BLOCK_RESP"
+	Height   int
+	Block    *types.Block
+	LastHash []byte
+}
 
 type Service struct {
 	host host.Host
@@ -37,10 +47,11 @@ func NewService(h host.Host, bc *core.Blockchain) *Service {
 func (s *Service) initProtocols() {
 	s.host.SetStreamHandler(BlockProtocolID, s.handleBlockStream)
 	s.host.SetStreamHandler(TxProtocolID, s.handleTxStream)
+	s.host.SetStreamHandler(SyncProtocolID, s.handleSyncStream)
 }
 
 func (s *Service) BroadcastBlock(block *types.Block) error {
-	log.Printf("Broadcasting block with %d transactions. Pool before: %s", 
+	log.Printf("Broadcasting block with %d transactions. Pool before: %s",
 		len(block.Transactions),
 		s.bc.GetTxPoolStatus())
 
@@ -58,7 +69,7 @@ func (s *Service) BroadcastBlock(block *types.Block) error {
 
 	log.Printf("Block broadcast complete. Pool after: %s",
 		s.bc.GetTxPoolStatus())
-	
+
 	return nil
 }
 
@@ -138,6 +149,55 @@ func (s *Service) handleTxStream(stream network.Stream) {
 	s.BroadcastTransaction(&tx)
 }
 
+func (s *Service) handleSyncStream(stream network.Stream) {
+	defer stream.Close()
+
+	for {
+		var msg SyncMessage
+		if err := json.NewDecoder(stream).Decode(&msg); err != nil {
+			if err == io.EOF {
+				return
+			}
+			log.Printf("Error decoding: %v", err)
+			return
+		}
+
+		switch msg.Type {
+		case "HEIGHT_REQ":
+			lastBlock, err := s.bc.GetLastBlock()
+			if err != nil {
+				log.Printf("Error getting last block: %v", err)
+				return
+			}
+			resp := SyncMessage{
+				Type:     "HEIGHT_RESP",
+				Height:   1, // TODO: Implement proper height tracking
+				LastHash: lastBlock.Hash,
+			}
+			if err := json.NewEncoder(stream).Encode(resp); err != nil {
+				log.Printf("Error sending height response: %v", err)
+				return
+			}
+		case "BLOCK_REQ":
+			// TODO: Implement block fetching and sending
+			// For now, just send the last block
+			lastBlock, err := s.bc.GetLastBlock()
+			if err != nil {
+				log.Printf("Error getting last block: %v", err)
+				return
+			}
+			resp := SyncMessage{
+				Type:  "BLOCK_RESP",
+				Block: lastBlock,
+			}
+			if err := json.NewEncoder(stream).Encode(resp); err != nil {
+				log.Printf("Error sending block response: %v", err)
+				return
+			}
+		}
+	}
+}
+
 func (s *Service) ConnectToPeer(peerAddr string) error {
 	peerInfo, err := peer.AddrInfoFromString(peerAddr)
 	if err != nil {
@@ -157,9 +217,65 @@ func (s *Service) GetPeers() []peer.ID {
 }
 
 func (s *Service) SyncWithPeer(peer peer.ID) error {
-	// Get peer's latest block height
-	// Compare with our height
-	// Request missing blocks
+	log.Printf("Starting sync with peer: %s", peer.String())
+
+	// Open stream for sync
+	stream, err := s.host.NewStream(context.Background(), peer, SyncProtocolID)
+	if err != nil {
+		return fmt.Errorf("failed to open sync stream: %v", err)
+	}
+	defer stream.Close()
+
+	// Request peer's height
+	heightReq := SyncMessage{Type: "HEIGHT_REQ"}
+	if err := json.NewEncoder(stream).Encode(heightReq); err != nil {
+		return fmt.Errorf("failed to send height request: %v", err)
+	}
+
+	// Get peer's response
+	var heightResp SyncMessage
+	if err := json.NewDecoder(stream).Decode(&heightResp); err != nil {
+		return fmt.Errorf("failed to receive height response: %v", err)
+	}
+
+	// Compare heights and request missing blocks
+	lastBlock, err := s.bc.GetLastBlock()
+	if err != nil {
+		return fmt.Errorf("failed to get last block: %v", err)
+	}
+
+	if heightResp.Height > 0 && !bytes.Equal(lastBlock.Hash, heightResp.LastHash) {
+		// Request blocks
+		blockReq := SyncMessage{
+			Type:     "BLOCK_REQ",
+			LastHash: lastBlock.Hash,
+		}
+		if err := json.NewEncoder(stream).Encode(blockReq); err != nil {
+			return fmt.Errorf("failed to send block request: %v", err)
+		}
+
+		// Process incoming blocks
+		for {
+			var blockResp SyncMessage
+			if err := json.NewDecoder(stream).Decode(&blockResp); err != nil {
+				if err == io.EOF {
+					break
+				}
+				return fmt.Errorf("failed to receive block: %v", err)
+			}
+
+			if blockResp.Type == "BLOCK_RESP" && blockResp.Block != nil {
+				if err := s.bc.AddBlock(blockResp.Block); err != nil {
+					log.Printf("Failed to add synced block: %v", err)
+					continue
+				}
+				log.Printf("Added synced block with %d transactions",
+					len(blockResp.Block.Transactions))
+			}
+		}
+	}
+
+	log.Printf("Sync complete with peer: %s", peer.String())
 	return nil
 }
 
